@@ -74,3 +74,13 @@ CREATE TRIGGER update_customers_updated_at BEFORE UPDATE ON customers
 
 CREATE TRIGGER update_ugc_submissions_updated_at BEFORE UPDATE ON ugc_submissions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Función RPC para incrementar order count de forma atómica
+CREATE OR REPLACE FUNCTION increment_order_count(customer_id uuid)
+RETURNS customers AS $$
+  UPDATE customers
+  SET orders_count = orders_count + 1,
+      updated_at = NOW()
+  WHERE id = customer_id
+  RETURNING *;
+$$ LANGUAGE sql;
