@@ -8,9 +8,16 @@ export interface UGCInvitationData {
   customerId: string
 }
 
-export function generateUGCToken(customerId: string, shopDomain: string): string {
-  const data = `${customerId}:${shopDomain}:${Date.now()}`
+export function generateUGCToken(customerId: string, shopDomain: string, timestamp?: number): string {
+  const ts = timestamp || Date.now()
+  const data = `${customerId}:${shopDomain}:${ts}`
   return crypto.createHash('sha256').update(data).digest('hex')
+}
+
+export function validateUGCToken(token: string, customerId: string, shopDomain: string, sentAt: string): boolean {
+  const timestamp = new Date(sentAt).getTime()
+  const expectedToken = generateUGCToken(customerId, shopDomain, timestamp)
+  return expectedToken === token
 }
 
 export function generateUGCFormUrl(token: string): string {
@@ -20,8 +27,9 @@ export function generateUGCFormUrl(token: string): string {
 
 export async function sendUGCInvitationEmail(data: UGCInvitationData): Promise<boolean> {
   try {
-    // Generar token único para el formulario
-    const token = generateUGCToken(data.customerId, data.shopDomain)
+    // Usar timestamp actual para generar token consistente
+    const currentTimestamp = Date.now()
+    const token = generateUGCToken(data.customerId, data.shopDomain, currentTimestamp)
     const ugcFormUrl = generateUGCFormUrl(token)
 
     // Obtener template personalizado de la tienda (si existe)
