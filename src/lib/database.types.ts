@@ -44,7 +44,7 @@ export interface Database {
           first_name: string | null
           last_name: string | null
           orders_count: number
-          shop_domain: string
+          shop_id: string
           created_at: string
           updated_at: string
         }
@@ -55,7 +55,7 @@ export interface Database {
           first_name?: string | null
           last_name?: string | null
           orders_count?: number
-          shop_domain: string
+          shop_id: string
           created_at?: string
           updated_at?: string
         }
@@ -66,7 +66,7 @@ export interface Database {
           first_name?: string | null
           last_name?: string | null
           orders_count?: number
-          shop_domain?: string
+          shop_id?: string
           created_at?: string
           updated_at?: string
         }
@@ -75,36 +75,80 @@ export interface Database {
         Row: {
           id: string
           customer_id: string
-          shop_domain: string
+          shop_id: string
           video_url: string | null
           video_key: string | null
-          status: 'pending' | 'approved' | 'rejected'
+          status: 'pending' | 'processing' | 'approved' | 'rejected'
           review_notes: string | null
-          reward_sent: boolean
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           customer_id: string
-          shop_domain: string
+          shop_id: string
           video_url?: string | null
           video_key?: string | null
-          status?: 'pending' | 'approved' | 'rejected'
+          status?: 'pending' | 'processing' | 'approved' | 'rejected'
           review_notes?: string | null
-          reward_sent?: boolean
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
           customer_id?: string
-          shop_domain?: string
+          shop_id?: string
           video_url?: string | null
           video_key?: string | null
-          status?: 'pending' | 'approved' | 'rejected'
+          status?: 'pending' | 'processing' | 'approved' | 'rejected'
           review_notes?: string | null
-          reward_sent?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      rewards: {
+        Row: {
+          id: string
+          submission_id: string
+          shop_id: string
+          type: 'discount' | 'gift_card'
+          value: number
+          currency: string
+          shopify_discount_id: string | null
+          shopify_gift_card_id: string | null
+          status: 'pending' | 'sent' | 'failed'
+          sent_at: string | null
+          error_message: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          submission_id: string
+          shop_id: string
+          type: 'discount' | 'gift_card'
+          value: number
+          currency: string
+          shopify_discount_id?: string | null
+          shopify_gift_card_id?: string | null
+          status?: 'pending' | 'sent' | 'failed'
+          sent_at?: string | null
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          submission_id?: string
+          shop_id?: string
+          type?: 'discount' | 'gift_card'
+          value?: number
+          currency?: string
+          shopify_discount_id?: string | null
+          shopify_gift_card_id?: string | null
+          status?: 'pending' | 'sent' | 'failed'
+          sent_at?: string | null
+          error_message?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -113,21 +157,35 @@ export interface Database {
         Row: {
           id: string
           customer_id: string
-          shop_domain: string
+          shop_id: string
           sent_at: string
         }
         Insert: {
           id?: string
           customer_id: string
-          shop_domain: string
+          shop_id: string
           sent_at?: string
         }
         Update: {
           id?: string
           customer_id?: string
-          shop_domain?: string
+          shop_id?: string
           sent_at?: string
         }
+      }
+    }
+    Functions: {
+      increment_order_count: {
+        Args: {
+          customer_id: string
+        }
+        Returns: Database['public']['Tables']['customers']['Row']
+      }
+      get_shop_id: {
+        Args: {
+          domain: string
+        }
+        Returns: string
       }
     }
   }

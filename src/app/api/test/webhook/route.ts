@@ -33,10 +33,22 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(mockOrder)
     })
 
-    const result = await response.json()
+    let result
+    try {
+      result = await response.json()
+    } catch (jsonError) {
+      const text = await response.text()
+      return NextResponse.json({
+        success: false,
+        error: 'Webhook returned non-JSON response',
+        status: response.status,
+        response_body: text.substring(0, 500) + '...'
+      }, { status: 500 })
+    }
 
     return NextResponse.json({
-      success: true,
+      success: response.ok,
+      status: response.status,
       webhook_response: result,
       mock_data: {
         order: mockOrder,

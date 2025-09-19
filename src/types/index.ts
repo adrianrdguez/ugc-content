@@ -5,7 +5,7 @@ export interface Customer {
   first_name: string;
   last_name: string;
   orders_count: number;
-  shop_domain: string;
+  shop_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -13,12 +13,27 @@ export interface Customer {
 export interface UGCSubmission {
   id: string;
   customer_id: string;
-  shop_domain: string;
+  shop_id: string;
   video_url: string;
   video_key: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'processing' | 'approved' | 'rejected';
   review_notes?: string;
-  reward_sent: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Reward {
+  id: string;
+  submission_id: string;
+  shop_id: string;
+  type: 'discount' | 'gift_card';
+  value: number;
+  currency: string;
+  shopify_discount_id?: string;
+  shopify_gift_card_id?: string;
+  status: 'pending' | 'sent' | 'failed';
+  sent_at?: string;
+  error_message?: string;
   created_at: string;
   updated_at: string;
 }

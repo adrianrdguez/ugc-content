@@ -15,12 +15,21 @@ export async function findOrCreateCustomer(
   shopifyCustomer: ShopifyCustomer,
   shopDomain: string
 ): Promise<Customer> {
+  // Primero obtener shop_id desde el dominio
+  const { data: shopId, error: shopError } = await supabaseAdmin.rpc('get_shop_id', {
+    domain: shopDomain
+  })
+
+  if (shopError || !shopId) {
+    throw new Error(`Shop not found for domain: ${shopDomain}`)
+  }
+
   // Buscar customer existente
   const { data: existingCustomer } = await supabaseAdmin
     .from('customers')
     .select('*')
     .eq('shopify_customer_id', shopifyCustomer.id.toString())
-    .eq('shop_domain', shopDomain)
+    .eq('shop_id', shopId)
     .single()
 
   if (existingCustomer) {
@@ -34,7 +43,7 @@ export async function findOrCreateCustomer(
     first_name: shopifyCustomer.first_name,
     last_name: shopifyCustomer.last_name,
     orders_count: 0,
-    shop_domain: shopDomain,
+    shop_id: shopId,
   }
 
   const { data: newCustomer, error } = await supabaseAdmin
@@ -76,11 +85,20 @@ export async function hasReceivedInvitation(
   customerId: string, 
   shopDomain: string
 ): Promise<boolean> {
+  // Obtener shop_id desde el dominio
+  const { data: shopId, error: shopError } = await supabaseAdmin.rpc('get_shop_id', {
+    domain: shopDomain
+  })
+
+  if (shopError || !shopId) {
+    throw new Error(`Shop not found for domain: ${shopDomain}`)
+  }
+
   const { data: invitation } = await supabaseAdmin
     .from('email_invitations')
     .select('id')
     .eq('customer_id', customerId)
-    .eq('shop_domain', shopDomain)
+    .eq('shop_id', shopId)
     .single()
 
   return !!invitation
@@ -90,11 +108,20 @@ export async function recordInvitationSent(
   customerId: string,
   shopDomain: string
 ): Promise<void> {
+  // Obtener shop_id desde el dominio
+  const { data: shopId, error: shopError } = await supabaseAdmin.rpc('get_shop_id', {
+    domain: shopDomain
+  })
+
+  if (shopError || !shopId) {
+    throw new Error(`Shop not found for domain: ${shopDomain}`)
+  }
+
   const { error } = await supabaseAdmin
     .from('email_invitations')
     .insert({
       customer_id: customerId,
-      shop_domain: shopDomain,
+      shop_id: shopId,
     })
 
   if (error) {
