@@ -1,6 +1,26 @@
 'use client'
 
 import { useState } from 'react'
+import {
+  Page,
+  Layout,
+  Card,
+  Form,
+  FormLayout,
+  TextField,
+  Button,
+  Text,
+  Banner,
+  Badge,
+  Link,
+  Frame,
+  Toast,
+  Collapsible,
+  List,
+  Divider,
+  AppProvider
+} from '@shopify/polaris'
+import { PlayIcon, NoteIcon } from '@shopify/polaris-icons'
 
 interface TestResult {
   step: string
@@ -15,18 +35,29 @@ export default function DemoPage() {
   const [results, setResults] = useState<TestResult[]>([])
   const [isRunning, setIsRunning] = useState(false)
   const [uploadToken, setUploadToken] = useState<string>('')
+  const [toastActive, setToastActive] = useState(false)
+  const [expandedResults, setExpandedResults] = useState<string[]>([])
 
-  const addResult = (step: string, status: 'success' | 'error', data?: any, error?: string) => {
+  const addResult = (step: string, status: 'pending' | 'success' | 'error', data?: any, error?: string) => {
     setResults(prev => [...prev, { step, status, data, error }])
+  }
+
+  const toggleResultExpanded = (step: string) => {
+    setExpandedResults(prev => 
+      prev.includes(step) 
+        ? prev.filter(s => s !== step)
+        : [...prev, step]
+    )
   }
 
   const runTypeformFlow = async () => {
     setIsRunning(true)
     setResults([])
+    setUploadToken('')
     
     try {
-      // Paso 1: Simular webhook de Typeform
-      addResult('1. Simulando Typeform webhook', 'pending')
+      // Step 1: Simulate Typeform webhook
+      addResult('Simulating Typeform webhook', 'pending')
       
       const webhookResponse = await fetch('/api/webhooks/typeform', {
         method: 'POST',
@@ -61,11 +92,11 @@ export default function DemoPage() {
       const webhookResult = await webhookResponse.json()
       
       if (webhookResult.success) {
-        addResult('1. Typeform webhook procesado', 'success', webhookResult)
+        addResult('Typeform webhook processed successfully', 'success', webhookResult)
         setUploadToken(webhookResult.upload_token)
         
-        // Paso 2: Validar token generado
-        addResult('2. Validando token generado', 'pending')
+        // Step 2: Validate generated token
+        addResult('Validating generated token', 'pending')
         
         const validateResponse = await fetch('/api/ugc/validate-upload-token', {
           method: 'POST',
@@ -76,10 +107,10 @@ export default function DemoPage() {
         const validateResult = await validateResponse.json()
         
         if (validateResult.valid) {
-          addResult('2. Token válido', 'success', validateResult)
+          addResult('Token validation successful', 'success', validateResult)
           
-          // Paso 3: Probar generación de URL de upload
-          addResult('3. Generando URL de upload', 'pending')
+          // Step 3: Test upload URL generation
+          addResult('Generating upload URL', 'pending')
           
           const uploadUrlResponse = await fetch('/api/ugc/upload-url', {
             method: 'POST',
@@ -96,152 +127,226 @@ export default function DemoPage() {
           const uploadUrlResult = await uploadUrlResponse.json()
           
           if (uploadUrlResult.success) {
-            addResult('3. URL de upload generada', 'success', {
+            addResult('Upload URL generated successfully', 'success', {
               videoKey: uploadUrlResult.videoKey,
               publicUrl: uploadUrlResult.publicUrl
             })
+            setToastActive(true)
           } else {
-            addResult('3. Error generando URL', 'error', null, uploadUrlResult.error)
+            addResult('Failed to generate upload URL', 'error', null, uploadUrlResult.error)
           }
           
         } else {
-          addResult('2. Token inválido', 'error', null, validateResult.error)
+          addResult('Token validation failed', 'error', null, validateResult.error)
         }
         
       } else {
-        addResult('1. Error en webhook', 'error', null, webhookResult.error)
+        addResult('Webhook processing failed', 'error', null, webhookResult.error)
       }
       
     } catch (error) {
-      addResult('Error general', 'error', null, error instanceof Error ? error.message : 'Unknown error')
+      addResult('General error occurred', 'error', null, error instanceof Error ? error.message : 'Unknown error')
     }
     
     setIsRunning(false)
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">
-            🧪 Demo Typeform + UGC Flow
-          </h1>
-          
-          <div className="grid md:grid-cols-2 gap-6 mb-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email del cliente
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-                disabled={isRunning}
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Nombre del cliente
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-                disabled={isRunning}
-              />
-            </div>
-          </div>
-          
-          <button
-            onClick={runTypeformFlow}
-            disabled={isRunning}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            {isRunning ? 'Ejecutando flujo...' : 'Probar flujo completo'}
-          </button>
-          
-          {uploadToken && (
-            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <h3 className="font-medium text-green-900 mb-2">✅ Token generado</h3>
-              <p className="text-sm text-green-700 mb-3">
-                Enlace de upload (válido 7 días):
-              </p>
-              <a
-                href={`/ugc-upload?token=${uploadToken}`}
-                target="_blank"
-                className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 inline-block"
-              >
-                Abrir página de upload →
-              </a>
-            </div>
-          )}
-        </div>
+  const getStatusBadge = (status: string) => {
+    const config = {
+      pending: { tone: 'warning' as const, text: 'Processing...' },
+      success: { tone: 'success' as const, text: 'Success' },
+      error: { tone: 'critical' as const, text: 'Error' },
+    }
+    return <Badge tone={config[status as keyof typeof config]?.tone || 'info'}>
+      {config[status as keyof typeof config]?.text || status}
+    </Badge>
+  }
 
-        {/* Resultados */}
-        {results.length > 0 && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              Resultados del test
-            </h2>
-            
-            <div className="space-y-4">
-              {results.map((result, index) => (
-                <div
-                  key={index}
-                  className={`p-4 rounded-lg border ${
-                    result.status === 'success' 
-                      ? 'bg-green-50 border-green-200' 
-                      : result.status === 'error'
-                      ? 'bg-red-50 border-red-200'
-                      : 'bg-yellow-50 border-yellow-200'
-                  }`}
-                >
-                  <div className="flex items-center mb-2">
-                    <span className={`w-3 h-3 rounded-full mr-3 ${
-                      result.status === 'success' 
-                        ? 'bg-green-500' 
-                        : result.status === 'error'
-                        ? 'bg-red-500'
-                        : 'bg-yellow-500'
-                    }`}></span>
-                    <h3 className="font-medium text-gray-900">{result.step}</h3>
+  const toastMarkup = toastActive ? (
+    <Toast 
+      content="Demo flow completed successfully!" 
+      onDismiss={() => setToastActive(false)} 
+    />
+  ) : null
+
+  return (
+    <AppProvider
+      i18n={{
+        Polaris: {
+          Avatar: { label: 'Avatar', labelWithInitials: 'Avatar with initials {initials}' },
+          ContextualSaveBar: { save: 'Save', discard: 'Discard' },
+          TextField: { characterCount: '{count} characters' },
+          TopBar: { toggleMenuLabel: 'Toggle menu', SearchField: { clearButtonLabel: 'Clear', search: 'Search' } },
+          Modal: { iFrameTitle: 'body markup' },
+          Frame: { skipToContent: 'Skip to content', Navigation: { closeMobileNavigationLabel: 'Close navigation' } },
+        },
+      }}
+    >
+      <Frame>
+        {toastMarkup}
+        <Page
+          title="🧪 Typeform + UGC Flow Demo"
+          subtitle="Test the complete integration flow from Typeform to video upload"
+        >
+        <Layout>
+          <Layout.Section>
+            <Card>
+              <div style={{ padding: '1rem' }}>
+                <Form onSubmit={runTypeformFlow}>
+                <FormLayout>
+                  <FormLayout.Group>
+                    <TextField
+                      type="email"
+                      label="Customer Email"
+                      value={email}
+                      onChange={setEmail}
+                      disabled={isRunning}
+                      autoComplete="email"
+                    />
+                    <TextField
+                      label="Customer Name"
+                      value={name}
+                      onChange={setName}
+                      disabled={isRunning}
+                      autoComplete="name"
+                    />
+                  </FormLayout.Group>
+                  
+                  <Button
+                    variant="primary"
+                    size="large"
+                    submit
+                    loading={isRunning}
+                    icon={PlayIcon}
+                  >
+                    {isRunning ? 'Running Demo...' : 'Test Complete Flow'}
+                  </Button>
+                </FormLayout>
+                </Form>
+              </div>
+            </Card>
+          </Layout.Section>
+
+          {uploadToken && (
+            <Layout.Section>
+              <Banner tone="success">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <Text as="p" fontWeight="medium">
+                    ✅ Upload token generated successfully!
+                  </Text>
+                  <Text as="p">
+                    Link is valid for 7 days. Click below to test the upload page:
+                  </Text>
+                  <Link 
+                    url={`/ugc-upload?token=${uploadToken}`}
+                  >
+                    Open Upload Page →
+                  </Link>
+                </div>
+              </Banner>
+            </Layout.Section>
+          )}
+
+          {results.length > 0 && (
+            <Layout.Section>
+              <Card>
+                <div style={{ padding: '1rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <Text as="h2" variant="headingMd">Test Results</Text>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      {results.map((result, index) => (
+                        <Card key={index}>
+                          <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                <Text as="p" fontWeight="medium">
+                                  {result.step}
+                                </Text>
+                                {getStatusBadge(result.status)}
+                              </div>
+                              {result.data && (
+                                <Button
+                                  variant="plain"
+                                  icon={NoteIcon}
+                                  onClick={() => toggleResultExpanded(result.step)}
+                                >
+                                  {expandedResults.includes(result.step) ? 'Hide' : 'Show'} Details
+                                </Button>
+                              )}
+                            </div>
+                            
+                            {result.error && (
+                              <Banner tone="critical">
+                                <Text as="p">{result.error}</Text>
+                              </Banner>
+                            )}
+                            
+                            {result.data && (
+                              <Collapsible 
+                                open={expandedResults.includes(result.step)}
+                                id={`result-${index}`}
+                              >
+                                <Card>
+                                  <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    <Text as="p" fontWeight="medium">Response Data:</Text>
+                                    <div style={{ 
+                                      backgroundColor: '#f6f6f7', 
+                                      padding: '12px', 
+                                      borderRadius: '6px',
+                                      fontSize: '12px',
+                                      fontFamily: 'monospace',
+                                      overflow: 'auto',
+                                      maxHeight: '200px'
+                                    }}>
+                                      <pre>{JSON.stringify(result.data, null, 2)}</pre>
+                                    </div>
+                                  </div>
+                                </Card>
+                              </Collapsible>
+                            )}
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </Layout.Section>
+          )}
+
+          <Layout.Section>
+            <Card>
+              <div style={{ padding: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <Text as="h2" variant="headingMd">💡 How the Flow Works</Text>
+                  <div>
+                    <List type="number">
+                      <List.Item>Simulates a user completing your Typeform</List.Item>
+                      <List.Item>Webhook processes the data and creates an upload token</List.Item>
+                      <List.Item>Token is validated and customer data is retrieved</List.Item>
+                      <List.Item>Signed URL is generated for direct upload to Cloudflare R2</List.Item>
+                      <List.Item>User can access the upload page with their unique link</List.Item>
+                    </List>
                   </div>
                   
-                  {result.error && (
-                    <p className="text-red-700 text-sm mb-2">❌ {result.error}</p>
-                  )}
+                  <Divider />
                   
-                  {result.data && (
-                    <details className="text-sm text-gray-600">
-                      <summary className="cursor-pointer hover:text-gray-800">
-                        Ver datos
-                      </summary>
-                      <pre className="mt-2 bg-gray-100 p-2 rounded text-xs overflow-auto">
-                        {JSON.stringify(result.data, null, 2)}
-                      </pre>
-                    </details>
-                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <Text as="p" fontWeight="medium">Next Steps:</Text>
+                    <List>
+                      <List.Item>Configure your Typeform webhook URL</List.Item>
+                      <List.Item>Set up email provider for sending upload links</List.Item>
+                      <List.Item>Customize email templates for your brand</List.Item>
+                      <List.Item>Configure OAuth for Shopify integration</List.Item>
+                    </List>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Instrucciones */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mt-6">
-          <h3 className="font-medium text-blue-900 mb-2">💡 Cómo funciona</h3>
-          <ol className="text-sm text-blue-800 space-y-1">
-            <li>1. Simula que un usuario completa tu Typeform</li>
-            <li>2. El webhook procesa los datos y crea un token de upload</li>
-            <li>3. Se valida el token y obtiene datos del cliente</li>
-            <li>4. Se genera una URL firmada para upload a Cloudflare R2</li>
-            <li>5. El usuario puede usar el enlace para subir su video</li>
-          </ol>
-        </div>
-      </div>
-    </div>
+              </div>
+            </Card>
+          </Layout.Section>
+        </Layout>
+        </Page>
+      </Frame>
+    </AppProvider>
   )
 }

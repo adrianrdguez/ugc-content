@@ -1,7 +1,24 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
+import {
+  Page,
+  Layout,
+  Card,
+  Form,
+  FormLayout,
+  Button,
+  Text,
+  Banner,
+  ProgressBar,
+  Spinner,
+  EmptyState,
+  DropZone,
+  Thumbnail,
+  AppProvider,
+  Toast
+} from '@shopify/polaris'
 
 interface CustomerData {
   id: string
@@ -30,6 +47,7 @@ export default function UGCUploadPage() {
   })
   const [error, setError] = useState<string>('')
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [toastActive, setToastActive] = useState(false)
 
   useEffect(() => {
     if (token) {
@@ -64,10 +82,17 @@ export default function UGCUploadPage() {
     }
   }
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+  const handleDropZoneDrop = useCallback(
+    (_dropFiles: File[], acceptedFiles: File[], _rejectedFiles: File[]) => {
+      const file = acceptedFiles[0]
+      if (file) {
+        handleFileSelect(file)
+      }
+    },
+    [],
+  )
 
+  const handleFileSelect = (file: File) => {
     const maxSize = 100 * 1024 * 1024 // 100MB
     const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo']
 
@@ -85,15 +110,13 @@ export default function UGCUploadPage() {
     setError('')
   }
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    
+  const handleSubmit = async () => {
     if (!selectedFile || !customerData) return
 
     try {
       setUploadProgress({ stage: 'uploading', progress: 20, message: 'Preparing upload...' })
 
-      // 1. Obtener URL de upload firmada
+      // 1. Get upload URL
       const uploadResponse = await fetch('/api/ugc/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -114,7 +137,7 @@ export default function UGCUploadPage() {
 
       setUploadProgress({ stage: 'uploading', progress: 40, message: 'Uploading video...' })
 
-      // 2. Upload directo a Cloudflare R2 (con fallback a proxy)
+      // 2. Upload to R2 with fallback to proxy
       let uploadSuccess = false
       let finalVideoKey = uploadData.videoKey
 
@@ -135,7 +158,6 @@ export default function UGCUploadPage() {
       } catch (directUploadError) {
         console.warn('Direct upload failed, using proxy:', directUploadError)
         
-        // Fallback: usar proxy upload
         setUploadProgress({ stage: 'uploading', progress: 50, message: 'Using proxy upload...' })
         
         const formData = new FormData()
@@ -164,7 +186,7 @@ export default function UGCUploadPage() {
 
       setUploadProgress({ stage: 'processing', progress: 80, message: 'Processing submission...' })
 
-      // 3. Crear submission y marcar token como usado
+      // 3. Create submission
       const submissionResponse = await fetch('/api/ugc/submit-from-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -182,6 +204,7 @@ export default function UGCUploadPage() {
 
       setUploadProgress({ stage: 'completed', progress: 100, message: 'Video submitted successfully!' })
       setIsSubmitted(true)
+      setToastActive(true)
 
     } catch (err) {
       console.error('Upload error:', err)
@@ -191,142 +214,270 @@ export default function UGCUploadPage() {
     }
   }
 
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  const validVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo']
+
+  const fileUpload = !selectedFile && (
+    <DropZone
+      accept={validVideoTypes.join(',')}
+      type="video"
+      onDrop={handleDropZoneDrop}
+      disabled={uploadProgress.stage === 'uploading' || uploadProgress.stage === 'processing'}
+    >
+      <DropZone.FileUpload actionTitle="Upload video" actionHint="or drop video to upload" />
+    </DropZone>
+  )
+
+  const uploadedFile = selectedFile && (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <Thumbnail
+          size="small"
+          alt={selectedFile.name}
+          source="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M8 5v14l11-7z'/%3E%3C/svg%3E"
+        />
+        <div>
+          <Text variant="bodyMd" as="p" fontWeight="medium">
+            {selectedFile.name}
+          </Text>
+          <Text variant="bodySm" as="p" tone="subdued">
+            {formatFileSize(selectedFile.size)} • {selectedFile.type}
+          </Text>
+        </div>
+      </div>
+      <Button
+        size="slim"
+        onClick={() => setSelectedFile(null)}
+        disabled={uploadProgress.stage === 'uploading' || uploadProgress.stage === 'processing'}
+      >
+        Remove file
+      </Button>
+    </div>
+  )
+
+  const toastMarkup = toastActive ? (
+    <Toast 
+      content="Video submitted successfully!" 
+      onDismiss={() => setToastActive(false)} 
+    />
+  ) : null
+
+  // Loading state
   if (uploadProgress.stage === 'validating') {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Validating your upload link...</p>
-        </div>
-      </div>
+      <AppProvider
+        i18n={{
+          Polaris: {
+            Avatar: { label: 'Avatar', labelWithInitials: 'Avatar with initials {initials}' },
+            ContextualSaveBar: { save: 'Save', discard: 'Discard' },
+            TextField: { characterCount: '{count} characters' },
+            TopBar: { toggleMenuLabel: 'Toggle menu', SearchField: { clearButtonLabel: 'Clear', search: 'Search' } },
+            Modal: { iFrameTitle: 'body markup' },
+            Frame: { skipToContent: 'Skip to content', Navigation: { closeMobileNavigationLabel: 'Close navigation' } },
+          },
+        }}
+      >
+        <Page>
+          <Layout>
+            <Layout.Section>
+              <Card>
+                <div style={{ padding: '2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                  <Spinner size="large" />
+                  <Text as="p" variant="bodyMd" alignment="center">
+                    Validating your upload link...
+                  </Text>
+                </div>
+              </Card>
+            </Layout.Section>
+          </Layout>
+        </Page>
+      </AppProvider>
     )
   }
 
+  // Error state - invalid link
   if (error && !customerData) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-lg shadow p-6 text-center">
-          <div className="text-red-500 text-5xl mb-4">⚠️</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Invalid Link</h1>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <p className="text-sm text-gray-500">
-            Please check your email for the correct upload link or contact support.
-          </p>
-        </div>
-      </div>
+      <AppProvider
+        i18n={{
+          Polaris: {
+            Avatar: { label: 'Avatar', labelWithInitials: 'Avatar with initials {initials}' },
+            ContextualSaveBar: { save: 'Save', discard: 'Discard' },
+            TextField: { characterCount: '{count} characters' },
+            TopBar: { toggleMenuLabel: 'Toggle menu', SearchField: { clearButtonLabel: 'Clear', search: 'Search' } },
+            Modal: { iFrameTitle: 'body markup' },
+            Frame: { skipToContent: 'Skip to content', Navigation: { closeMobileNavigationLabel: 'Close navigation' } },
+          },
+        }}
+      >
+        <Page>
+          <Layout>
+            <Layout.Section>
+              <EmptyState
+                heading="Invalid Upload Link"
+                image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+              >
+                <Text as="p">{error}</Text>
+                <Text as="p" tone="subdued">
+                  Please check your email for the correct upload link or contact support.
+                </Text>
+              </EmptyState>
+            </Layout.Section>
+          </Layout>
+        </Page>
+      </AppProvider>
     )
   }
 
+  // Success state
   if (isSubmitted) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-lg shadow p-6 text-center">
-          <div className="text-green-500 text-5xl mb-4">🎉</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Video Submitted!</h1>
-          <p className="text-gray-600 mb-4">
-            Thank you for sharing your experience! Your video has been submitted for review.
-          </p>
-          <p className="text-sm text-gray-500 mb-4">
-            You'll receive your reward once the video is approved by our team.
-          </p>
-          <div className="bg-blue-50 p-3 rounded-lg">
-            <p className="text-sm text-blue-700">
-              We'll notify you at <strong>{customerData?.email}</strong> when your video is reviewed.
-            </p>
-          </div>
-        </div>
-      </div>
+      <AppProvider
+        i18n={{
+          Polaris: {
+            Avatar: { label: 'Avatar', labelWithInitials: 'Avatar with initials {initials}' },
+            ContextualSaveBar: { save: 'Save', discard: 'Discard' },
+            TextField: { characterCount: '{count} characters' },
+            TopBar: { toggleMenuLabel: 'Toggle menu', SearchField: { clearButtonLabel: 'Clear', search: 'Search' } },
+            Modal: { iFrameTitle: 'body markup' },
+            Frame: { skipToContent: 'Skip to content', Navigation: { closeMobileNavigationLabel: 'Close navigation' } },
+          },
+        }}
+      >
+        {toastMarkup}
+        <Page>
+          <Layout>
+            <Layout.Section>
+              <EmptyState
+                heading="Video Submitted Successfully! 🎉"
+                image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+              >
+                <Text as="p">
+                  Thank you for sharing your experience! Your video has been submitted for review.
+                </Text>
+                <Text as="p" tone="subdued">
+                  You'll receive your reward once the video is approved by our team.
+                </Text>
+                <div style={{ marginTop: '1rem' }}>
+                  <Banner tone="info">
+                    We'll notify you at <strong>{customerData?.email}</strong> when your video is reviewed.
+                  </Banner>
+                </div>
+              </EmptyState>
+            </Layout.Section>
+          </Layout>
+        </Page>
+      </AppProvider>
     )
   }
 
+  // Main upload form
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Upload Your Video 🎬
-            </h1>
-            <p className="text-gray-600">
-              Hi <strong>{customerData?.first_name}</strong>! Upload your video to earn your reward.
-            </p>
-          </div>
-
-          {/* Progress Bar */}
-          {uploadProgress.stage !== 'idle' && (
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-600">{uploadProgress.message}</span>
-                <span className="text-sm text-gray-600">{uploadProgress.progress}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className={`h-2 rounded-full transition-all duration-300 ${
-                    uploadProgress.stage === 'error' ? 'bg-red-500' : 'bg-blue-600'
-                  }`}
-                  style={{ width: `${uploadProgress.progress}%` }}
-                ></div>
-              </div>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Your Video
-              </label>
-              <input
-                type="file"
-                accept="video/*"
-                onChange={handleFileSelect}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                disabled={uploadProgress.stage === 'uploading' || uploadProgress.stage === 'processing'}
-              />
-              <p className="mt-2 text-sm text-gray-500">
-                MP4, WebM, MOV, or AVI. Maximum size: 100MB.
-              </p>
-            </div>
-
-            {selectedFile && (
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="font-medium text-gray-900 mb-2">Selected File:</h3>
-                <p className="text-sm text-gray-600">
-                  <strong>Name:</strong> {selectedFile.name}<br/>
-                  <strong>Size:</strong> {(selectedFile.size / 1024 / 1024).toFixed(1)} MB<br/>
-                  <strong>Type:</strong> {selectedFile.type}
-                </p>
-              </div>
+    <AppProvider
+      i18n={{
+        Polaris: {
+          Avatar: { label: 'Avatar', labelWithInitials: 'Avatar with initials {initials}' },
+          ContextualSaveBar: { save: 'Save', discard: 'Discard' },
+          TextField: { characterCount: '{count} characters' },
+          TopBar: { toggleMenuLabel: 'Toggle menu', SearchField: { clearButtonLabel: 'Clear', search: 'Search' } },
+          Modal: { iFrameTitle: 'body markup' },
+          Frame: { skipToContent: 'Skip to content', Navigation: { closeMobileNavigationLabel: 'Close navigation' } },
+        },
+      }}
+    >
+      <Page
+        title="Share Your Experience! 🎬"
+        subtitle={`Hi ${customerData?.first_name}! Upload your video to earn your reward.`}
+      >
+        <Layout>
+          <Layout.Section>
+            {/* Progress indicator */}
+            {uploadProgress.stage !== 'idle' && (
+              <Card>
+                <div style={{ padding: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <Text as="p" variant="bodyMd">
+                      {uploadProgress.message}
+                    </Text>
+                    <Text as="p" variant="bodyMd">
+                      {uploadProgress.progress}%
+                    </Text>
+                  </div>
+                  <ProgressBar 
+                    progress={uploadProgress.progress} 
+                    tone={uploadProgress.stage === 'error' ? 'critical' : 'primary'}
+                  />
+                </div>
+              </Card>
             )}
 
+            {/* Error banner */}
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-red-700 text-sm">{error}</p>
-              </div>
+              <Banner tone="critical">
+                <Text as="p">{error}</Text>
+              </Banner>
             )}
 
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-medium text-blue-900 mb-2">Video Tips:</h3>
-              <ul className="text-sm text-blue-700 space-y-1">
-                <li>• Good lighting and clear audio</li>
-                <li>• Show the product in use</li>
-                <li>• Share your honest experience</li>
-                <li>• Keep it between 30-120 seconds</li>
-              </ul>
-            </div>
+            {/* Upload form */}
+            <Card>
+              <div style={{ padding: '1rem' }}>
+                <Form onSubmit={handleSubmit}>
+                  <FormLayout>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <Text as="h2" variant="headingMd">Upload Your Video</Text>
+                        <Text as="p" tone="subdued">
+                          MP4, WebM, MOV, or AVI. Maximum size: 100MB.
+                        </Text>
+                      </div>
 
-            <button
-              type="submit"
-              disabled={!selectedFile || uploadProgress.stage === 'uploading' || uploadProgress.stage === 'processing'}
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              {uploadProgress.stage === 'uploading' || uploadProgress.stage === 'processing' 
-                ? 'Uploading...' 
-                : 'Submit Video'
-              }
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
+                      <div>
+                        {fileUpload}
+                        {uploadedFile}
+                      </div>
+
+                      {/* Guidelines */}
+                      <Card>
+                        <div style={{ padding: '1rem' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <Text as="h3" variant="headingMd">Video Guidelines</Text>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              <Text as="p">• Good lighting and clear audio</Text>
+                              <Text as="p">• Show the product in use</Text>
+                              <Text as="p">• Share your honest experience</Text>
+                              <Text as="p">• Keep it between 30-120 seconds</Text>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+
+                      <Button
+                        variant="primary"
+                        size="large"
+                        submit
+                        disabled={!selectedFile || uploadProgress.stage === 'uploading' || uploadProgress.stage === 'processing'}
+                        loading={uploadProgress.stage === 'uploading' || uploadProgress.stage === 'processing'}
+                      >
+                        {uploadProgress.stage === 'uploading' || uploadProgress.stage === 'processing' 
+                          ? 'Uploading...' 
+                          : 'Submit Video'
+                        }
+                      </Button>
+                    </div>
+                  </FormLayout>
+                </Form>
+              </div>
+            </Card>
+          </Layout.Section>
+        </Layout>
+      </Page>
+    </AppProvider>
   )
 }

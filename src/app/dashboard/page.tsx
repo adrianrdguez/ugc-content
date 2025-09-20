@@ -1,6 +1,22 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
+import {
+  Page,
+  Layout,
+  Card,
+  DataTable,
+  Tabs,
+  Button,
+  Modal,
+  Spinner,
+  EmptyState,
+  Banner,
+  AppProvider,
+  Toast,
+  Text
+} from '@shopify/polaris'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 
 interface UGCSubmission {
   id: string
@@ -25,12 +41,25 @@ export default function Dashboard() {
   const [selectedSubmission, setSelectedSubmission] = useState<UGCSubmission | null>(null)
   const [modalActive, setModalActive] = useState(false)
   const [actionLoading, setActionLoading] = useState<string>('')
+  const [toastActive, setToastActive] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
+  const [toastError, setToastError] = useState(false)
 
   const tabs = [
-    { id: 'pending', content: 'Pending', status: 'pending' },
+    { id: 'pending', content: 'Pending Review', status: 'pending' },
     { id: 'approved', content: 'Approved', status: 'approved' },
     { id: 'rejected', content: 'Rejected', status: 'rejected' },
   ]
+
+  const showToast = useCallback((message: string, isError = false) => {
+    setToastMessage(message)
+    setToastError(isError)
+    setToastActive(true)
+  }, [])
+
+  const hideToast = useCallback(() => {
+    setToastActive(false)
+  }, [])
 
   useEffect(() => {
     // Extraer parámetros de la URL
@@ -70,10 +99,10 @@ export default function Dashboard() {
       if (result.success) {
         setSubmissions(result.submissions)
       } else {
-        console.error('Failed to fetch submissions:', result.error)
+        showToast('Failed to fetch submissions', true)
       }
     } catch (error) {
-      console.error('Error fetching submissions:', error)
+      showToast('Error loading submissions', true)
     } finally {
       setLoading(false)
     }
@@ -94,14 +123,14 @@ export default function Dashboard() {
 
       const result = await response.json()
       if (result.success) {
-        // Refresh submissions
+        showToast('Submission approved successfully!')
         fetchSubmissions(tabs[selectedTab].status, shop, accessToken)
         setModalActive(false)
       } else {
-        console.error('Failed to approve:', result.error)
+        showToast('Failed to approve submission', true)
       }
     } catch (error) {
-      console.error('Error approving submission:', error)
+      showToast('Error approving submission', true)
     } finally {
       setActionLoading('')
     }
@@ -122,250 +151,253 @@ export default function Dashboard() {
 
       const result = await response.json()
       if (result.success) {
-        // Refresh submissions
+        showToast('Submission rejected successfully!')
         fetchSubmissions(tabs[selectedTab].status, shop, accessToken)
         setModalActive(false)
       } else {
-        console.error('Failed to reject:', result.error)
+        showToast('Failed to reject submission', true)
       }
     } catch (error) {
-      console.error('Error rejecting submission:', error)
+      showToast('Error rejecting submission', true)
     } finally {
       setActionLoading('')
     }
   }
 
-  const getStatusBadge = (status: string) => {
-    const statusClasses = {
-      pending: 'bg-yellow-100 text-yellow-800',
-      processing: 'bg-blue-100 text-blue-800',
-      approved: 'bg-green-100 text-green-800',
-      rejected: 'bg-red-100 text-red-800',
-    }
-    return (
-      <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusClasses[status as keyof typeof statusClasses]}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </span>
-    )
-  }
+  // Prepare data for DataTable
+  const rows = submissions.map((submission) => [
+    submission.customer_name || submission.customer_email,
+    submission.customer_email,
+    new Date(submission.created_at).toLocaleDateString(),
+    <StatusBadge key={submission.id} status={submission.status} />,
+    (
+      <div key={submission.id} style={{ display: 'flex', gap: '8px' }}>
+        <Button
+          size="slim"
+          onClick={() => {
+            setSelectedSubmission(submission)
+            setModalActive(true)
+          }}
+        >
+          View
+        </Button>
+        {submission.status === 'pending' && (
+          <>
+            <Button
+              size="slim"
+              loading={actionLoading === submission.id}
+              onClick={() => handleApprove(submission.id)}
+            >
+              Approve
+            </Button>
+            <Button
+              size="slim"
+              loading={actionLoading === submission.id}
+              onClick={() => handleReject(submission.id)}
+            >
+              Reject
+            </Button>
+          </>
+        )}
+      </div>
+    ),
+  ])
+
+  const headings = [
+    'Customer',
+    'Email',
+    'Date Submitted',
+    'Status',
+    'Actions',
+  ]
+
+  const toastMarkup = toastActive ? (
+    <Toast 
+      content={toastMessage} 
+      error={toastError}
+      onDismiss={hideToast} 
+    />
+  ) : null
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">UGC Dashboard</h1>
-          {shop && (
-            <p className="mt-2 text-sm text-gray-600">
-              Connected to: <span className="font-medium">{shop}</span>
-            </p>
-          )}
-        </div>
-
-        {/* Tabs */}
-        <div className="mb-6">
-          <nav className="flex space-x-8" aria-label="Tabs">
-            {tabs.map((tab, index) => (
-              <button
-                key={tab.id}
-                onClick={() => setSelectedTab(index)}
-                className={`${
-                  selectedTab === index
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm`}
+    <AppProvider
+      i18n={{
+        Polaris: {
+          Avatar: {
+            label: 'Avatar',
+            labelWithInitials: 'Avatar with initials {initials}',
+          },
+          ContextualSaveBar: {
+            save: 'Save',
+            discard: 'Discard',
+          },
+          TextField: {
+            characterCount: '{count} characters',
+          },
+          TopBar: {
+            toggleMenuLabel: 'Toggle menu',
+            SearchField: {
+              clearButtonLabel: 'Clear',
+              search: 'Search',
+            },
+          },
+          Modal: {
+            iFrameTitle: 'body markup',
+          },
+          Frame: {
+            skipToContent: 'Skip to content',
+            Navigation: {
+              closeMobileNavigationLabel: 'Close navigation',
+            },
+          },
+        },
+      }}
+    >
+      <Page
+        title="UGC Content Review"
+        subtitle={shop ? `Connected to ${shop}` : undefined}
+      >
+        {toastMarkup}
+        <Layout>
+          <Layout.Section>
+            <Card>
+              <Tabs
+                tabs={tabs.map((tab) => ({
+                  id: tab.id,
+                  content: tab.content,
+                  accessibilityLabel: tab.content,
+                }))}
+                selected={selectedTab}
+                onSelect={setSelectedTab}
               >
-                {tab.content}
-              </button>
-            ))}
-          </nav>
-        </div>
+                <div style={{ padding: '1rem' }}>
+                  {loading ? (
+                    <div style={{ padding: '2rem', textAlign: 'center' }}>
+                      <Spinner size="large" />
+                      <Text as="p" variant="bodyMd" tone="subdued">
+                        Loading submissions...
+                      </Text>
+                    </div>
+                  ) : submissions.length > 0 ? (
+                    <DataTable
+                      columnContentTypes={[
+                        'text',
+                        'text',
+                        'text',
+                        'text',
+                        'text',
+                      ]}
+                      headings={headings}
+                      rows={rows}
+                      footerContent={`Showing ${submissions.length} ${submissions.length === 1 ? 'submission' : 'submissions'}`}
+                    />
+                  ) : (
+                    <EmptyState
+                      heading={`No ${tabs[selectedTab].content.toLowerCase()} submissions`}
+                      image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+                    >
+                      <Text as="p">When customers submit UGC content, it will appear here for review.</Text>
+                    </EmptyState>
+                  )}
+                </div>
+              </Tabs>
+            </Card>
+          </Layout.Section>
+        </Layout>
 
-        {/* Content */}
-        <div className="bg-white shadow rounded-lg">
-          {loading ? (
-            <div className="flex justify-center items-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            </div>
-          ) : submissions.length > 0 ? (
-            <div className="overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Customer
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Email
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {submissions.map((submission) => (
-                    <tr key={submission.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {submission.customer_name || submission.customer_email}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {submission.customer_email}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(submission.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(submission.status)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => {
-                              setSelectedSubmission(submission)
-                              setModalActive(true)
-                            }}
-                            className="text-blue-600 hover:text-blue-900"
-                          >
-                            View
-                          </button>
-                          {submission.status === 'pending' && (
-                            <>
-                              <button
-                                onClick={() => handleApprove(submission.id)}
-                                disabled={actionLoading === submission.id}
-                                className="text-green-600 hover:text-green-900 disabled:opacity-50"
-                              >
-                                {actionLoading === submission.id ? 'Loading...' : 'Approve'}
-                              </button>
-                              <button
-                                onClick={() => handleReject(submission.id)}
-                                disabled={actionLoading === submission.id}
-                                className="text-red-600 hover:text-red-900 disabled:opacity-50"
-                              >
-                                {actionLoading === submission.id ? 'Loading...' : 'Reject'}
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <p className="text-gray-500">
-                No submissions found for {tabs[selectedTab].content.toLowerCase()} status.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Modal */}
         {modalActive && selectedSubmission && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-              <div className="mt-3">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Review UGC Submission</h3>
-                  <button
-                    onClick={() => setModalActive(false)}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <span className="sr-only">Close</span>
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+          <Modal
+            open={modalActive}
+            onClose={() => setModalActive(false)}
+            title="Review UGC Submission"
+            primaryAction={selectedSubmission.status === 'pending' ? {
+              content: 'Approve',
+              onAction: () => handleApprove(selectedSubmission.id),
+              loading: actionLoading === selectedSubmission.id
+            } : undefined}
+            secondaryActions={selectedSubmission.status === 'pending' ? [{
+              content: 'Reject',
+              onAction: () => handleReject(selectedSubmission.id),
+              loading: actionLoading === selectedSubmission.id,
+              destructive: true
+            }] : undefined}
+          >
+            <Modal.Section>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {/* Customer Information */}
+                <div>
+                  <Text as="h3" variant="headingMd">Customer Information</Text>
+                  <Card>
+                    <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <Text as="p"><strong>Name:</strong> {selectedSubmission.customer_name}</Text>
+                      <Text as="p"><strong>Email:</strong> {selectedSubmission.customer_email}</Text>
+                      <Text as="p"><strong>Status:</strong> <StatusBadge status={selectedSubmission.status} /></Text>
+                      <Text as="p"><strong>Submitted:</strong> {new Date(selectedSubmission.created_at).toLocaleString()}</Text>
+                    </div>
+                  </Card>
                 </div>
 
-                <div className="space-y-6">
-                  {/* Customer Info */}
-                  <div>
-                    <h4 className="text-md font-medium text-gray-900 mb-2">Customer Information</h4>
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <p><strong>Name:</strong> {selectedSubmission.customer_name}</p>
-                      <p><strong>Email:</strong> {selectedSubmission.customer_email}</p>
-                      <p><strong>Status:</strong> {getStatusBadge(selectedSubmission.status)}</p>
-                      <p><strong>Submitted:</strong> {new Date(selectedSubmission.created_at).toLocaleString()}</p>
+                {/* Video Preview */}
+                <div>
+                  <Text as="h3" variant="headingMd">Video Content</Text>
+                  <Card>
+                    <div style={{ padding: '1rem' }}>
+                      {selectedSubmission.video_url ? (
+                        <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0 }}>
+                          <video 
+                            controls 
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              borderRadius: '6px'
+                            }}
+                            src={selectedSubmission.video_url}
+                          >
+                            Your browser does not support the video tag.
+                          </video>
+                        </div>
+                      ) : (
+                        <Banner tone="info">
+                          <Text as="p">Video preview not available. Video key: {selectedSubmission.video_key}</Text>
+                        </Banner>
+                      )}
                     </div>
-                  </div>
-
-                  {/* Video */}
-                  <div>
-                    <h4 className="text-md font-medium text-gray-900 mb-2">Video</h4>
-                    {selectedSubmission.video_url ? (
-                      <video 
-                        controls 
-                        className="w-full max-h-96 rounded-lg"
-                        src={selectedSubmission.video_url}
-                      >
-                        Your browser does not support the video tag.
-                      </video>
-                    ) : (
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <p className="text-blue-700">
-                          Video preview not available. Video key: {selectedSubmission.video_key}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Review Notes */}
-                  {selectedSubmission.review_notes && (
-                    <div>
-                      <h4 className="text-md font-medium text-gray-900 mb-2">Review Notes</h4>
-                      <div className="bg-gray-50 p-4 rounded-lg">
-                        <p>{selectedSubmission.review_notes}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Reward Info */}
-                  {selectedSubmission.reward && (
-                    <div>
-                      <h4 className="text-md font-medium text-gray-900 mb-2">Reward Information</h4>
-                      <div className="bg-gray-50 p-4 rounded-lg">
-                        <p><strong>Type:</strong> {selectedSubmission.reward.type}</p>
-                        <p><strong>Value:</strong> {selectedSubmission.reward.value} {selectedSubmission.reward.currency}</p>
-                        <p><strong>Status:</strong> {selectedSubmission.reward.status}</p>
-                      </div>
-                    </div>
-                  )}
+                  </Card>
                 </div>
 
-                {/* Actions */}
-                {selectedSubmission.status === 'pending' && (
-                  <div className="mt-6 flex justify-end space-x-3">
-                    <button
-                      onClick={() => handleReject(selectedSubmission.id)}
-                      disabled={actionLoading === selectedSubmission.id}
-                      className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
-                    >
-                      {actionLoading === selectedSubmission.id ? 'Processing...' : 'Reject'}
-                    </button>
-                    <button
-                      onClick={() => handleApprove(selectedSubmission.id)}
-                      disabled={actionLoading === selectedSubmission.id}
-                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-                    >
-                      {actionLoading === selectedSubmission.id ? 'Processing...' : 'Approve'}
-                    </button>
+                {/* Review Notes */}
+                {selectedSubmission.review_notes && (
+                  <div>
+                    <Text as="h3" variant="headingMd">Review Notes</Text>
+                    <Card>
+                      <div style={{ padding: '1rem' }}>
+                        <Text as="p">{selectedSubmission.review_notes}</Text>
+                      </div>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Reward Information */}
+                {selectedSubmission.reward && (
+                  <div>
+                    <Text as="h3" variant="headingMd">Reward Information</Text>
+                    <Card>
+                      <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <Text as="p"><strong>Type:</strong> {selectedSubmission.reward.type}</Text>
+                        <Text as="p"><strong>Value:</strong> {selectedSubmission.reward.value} {selectedSubmission.reward.currency}</Text>
+                        <Text as="p"><strong>Status:</strong> {selectedSubmission.reward.status}</Text>
+                      </div>
+                    </Card>
                   </div>
                 )}
               </div>
-            </div>
-          </div>
+            </Modal.Section>
+          </Modal>
         )}
-      </div>
-    </div>
+      </Page>
+    </AppProvider>
   )
 }
