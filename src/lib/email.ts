@@ -104,6 +104,78 @@ function getDefaultEmailTemplate(): string {
   `
 }
 
+export interface UGCUploadEmailData {
+  to: string
+  customerName: string
+  uploadUrl: string
+  shopDomain: string
+}
+
+export async function sendUGCUploadEmail(data: UGCUploadEmailData): Promise<boolean> {
+  try {
+    // Obtener configuración de la tienda
+    const { data: shop } = await supabaseAdmin
+      .from('shops')
+      .select('reward_type, reward_value, reward_currency')
+      .eq('shopify_domain', data.shopDomain)
+      .single()
+
+    const rewardText = getRewardText(shop?.reward_type, shop?.reward_value, shop?.reward_currency)
+
+    const emailContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>¡Hola ${data.customerName}! 🎬</h2>
+        
+        <p>¡Gracias por tu interés en compartir tu experiencia!</p>
+        
+        <p>Hemos recibido tu información y ahora puedes subir tu video de testimonio.</p>
+        
+        <p><strong>🎁 Recompensa: ${rewardText}</strong></p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${data.uploadUrl}" 
+             style="background-color: #007cba; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+            Subir mi video ahora
+          </a>
+        </div>
+        
+        <p><strong>Importante:</strong> Este enlace es válido por 7 días.</p>
+        
+        <p>Consejos para tu video:</p>
+        <ul>
+          <li>Duración: 30-120 segundos</li>
+          <li>Buena iluminación</li>
+          <li>Muestra el producto claramente</li>
+          <li>Comparte tu experiencia honesta</li>
+        </ul>
+        
+        <p>¡Esperamos tu video!</p>
+        
+        <p>Saludos,<br>El equipo de ${data.shopDomain}</p>
+      </div>
+    `
+
+    // Log del email (cambiar por proveedor real)
+    console.log('📧 Upload Link Email:')
+    console.log('To:', data.to)
+    console.log('Subject: ¡Tu enlace para subir video UGC está listo!')
+    console.log('Upload URL:', data.uploadUrl)
+    console.log('Content:', emailContent)
+
+    // TODO: Integrar con proveedor real
+    // await emailProvider.send({
+    //   to: data.to,
+    //   subject: '¡Tu enlace para subir video UGC está listo!',
+    //   html: emailContent
+    // })
+
+    return true
+  } catch (error) {
+    console.error('Error sending upload email:', error)
+    return false
+  }
+}
+
 function getRewardText(
   rewardType?: string, 
   rewardValue?: number, 
